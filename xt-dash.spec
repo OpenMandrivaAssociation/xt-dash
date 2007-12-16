@@ -3,7 +3,7 @@
 %define bname	xt
 %define name	%{bname}-dash
 %define version	20020426a
-%define release	%mkrel 3
+%define release	%mkrel 4
 %define	jarlibs	servletapi5 xerces-j2 xml-commons-apis	
 
 Name:		%{name}
@@ -19,7 +19,7 @@ Patch0:		xt-dash-20020426a-public.patch
 Url:		http://www.blnz.com/xt/index.html
 Requires:	%{jarlibs}
 BuildRequires:	ant
-BuildRequires:	jpackage-utils >= 0:1.5 lzma
+BuildRequires:	java-rpmbuild >= 0:1.5 lzma
 BuildRequires:	%{jarlibs}
 %if %{gcj_support}
 Requires(post):	java-gcj-compat

@@ -28,7 +28,6 @@ BuildRequires:	java-gcj-compat-devel
 %else
 BuildArch:	noarch
 %endif
-BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-buildroot
 
 %description
 XT is an implementation in Java of XSL Transformations.

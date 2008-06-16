@@ -3,7 +3,7 @@
 %define bname	xt
 %define name	%{bname}-dash
 %define version	20020426a
-%define release	%mkrel 4
+%define release	%mkrel 5
 %define	jarlibs	servletapi5 xerces-j2 xml-commons-apis	
 
 Name:		%{name}

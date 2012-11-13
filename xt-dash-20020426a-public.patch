@@ -1,0 +1,248 @@
+--- xt-20020426a-src/src/com/jclark/xsl/dom/NodeBase.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/dom/NodeBase.java	2007-02-19 23:11:10.000000000 +0100
+@@ -9,9 +9,9 @@ import java.net.URL;
+  *  Base class wrapper which presents  our xt om Node 
+  * interface around a W3C Level 1 DOM node
+  */
+-abstract class NodeBase implements Node
++public abstract class NodeBase implements Node
+ {
+-    final org.w3c.dom.Node domNode;
++    public final org.w3c.dom.Node domNode;
+     int level;
+     private int childIndex;
+     ContainerNode parent;
+--- xt-20020426a-src/src/com/jclark/xsl/dom/RootNode.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/dom/RootNode.java	2007-02-19 23:25:29.000000000 +0100
+@@ -7,7 +7,7 @@ import com.jclark.xsl.tr.LoadContext;
+ import java.net.URL;
+ import java.net.MalformedURLException;
+ 
+-class RootNode extends ContainerNode
++public class RootNode extends ContainerNode
+ {
+     private org.w3c.dom.Document document;   // maybe null
+     org.w3c.dom.Document ownerDocument; // never null
+@@ -20,7 +20,7 @@ class RootNode extends ContainerNode
+     boolean includeComments;
+     boolean includeProcessingInstructions;
+ 
+-    RootNode(org.w3c.dom.Node node,
++    public RootNode(org.w3c.dom.Node node,
+              DOMExtensions extend,
+              LoadContext loadContext,
+              NameTable nameTable,
+@@ -99,18 +99,127 @@ class RootNode extends ContainerNode
+         return createElement(node);
+     }
+ 
+-    private ContainerNode createElement(org.w3c.dom.Node node)
++    private ContainerNode createContainer(org.w3c.dom.Node node)
+     {
+         org.w3c.dom.Node domParent = node.getParentNode();
+         while (domParent.getNodeType() == org.w3c.dom.Node.ENTITY_REFERENCE_NODE)
+             domParent = domParent.getParentNode();
++
++    if (domParent.equals(domNode))
++      return this;
++
++    return createElement(domParent);
++  }
++
++  public ContainerNode createElement(org.w3c.dom.Node node) {
++    ContainerNode container = createContainer(node);
++
++    // OPT It would be better to compute the child index lazily.
++    return new ElementNode(node, container, SiblingNodeIterator.computeChildIndex(container, node));
++  }
++
++  public Node createPI(org.w3c.dom.Node node) {
++    ContainerNode container = createContainer(node);
++
++    // OPT It would be better to compute the child index lazily.
++    return new ProcessingInstructionNode(node, container, SiblingNodeIterator.computeChildIndex(container, node));
++  }
++
++  public Node createComment(org.w3c.dom.Node node) {
++    ContainerNode container = createContainer(node);
++
++    // OPT It would be better to compute the child index lazily.
++    return new CommentNode(node, container, SiblingNodeIterator.computeChildIndex(container, node));
++  }
++
++  public Node createText(org.w3c.dom.Node node) {
++    Node text_node = null;
++
++    ContainerNode container = createContainer(node);
++
++    // OPT It would be better to compute the child index lazily.
++    int idx = SiblingNodeIterator.computeChildIndex(container, node);
++
++    org.w3c.dom.Node firstSibling = container.domNode.getFirstChild();
++    SafeNodeIterator iter = new SiblingNodeIterator(container, 0, firstSibling);
++
++    for (int i = 0; i < idx; i++)
++      text_node = iter.next();
++
++    return text_node;
++
++//    return new TextNode(node, container, SiblingNodeIterator.computeChildIndex(container, node));
++  }
++
++  public Node createAttribute(org.w3c.dom.Node node)
++  {
++    java.lang.reflect.Method method = null;
++
++    // first try using DOM Level 2 method (getOwnerElement)
++    try
++    {
++      Class cls = Class.forName("org.w3c.dom.Attr");
++      Class[] paramCls = new Class[0];
++
++      method = cls.getDeclaredMethod("getOwnerElement", paramCls);
++    }
++    catch (java.lang.ClassNotFoundException e)
++    {
++      return null;
++    }
++    catch (java.lang.NoSuchMethodException e)
++    {
++      method = null;
++    }
++
++    if (method == null)
++       return null;
++
++    Object[] params = new Object[0];
++
++    org.w3c.dom.Node domParent;
++
++    try
++    {
++        domParent = (org.w3c.dom.Node)method.invoke(node, params);
++    }
++    catch (java.lang.reflect.InvocationTargetException e)
++    {
++      return null;
++    }
++    catch (java.lang.IllegalAccessException e)
++    {
++      return null;
++    }
++
++    while (domParent.getNodeType() == org.w3c.dom.Node.ENTITY_REFERENCE_NODE)
++      domParent = domParent.getParentNode();
++
+         ContainerNode tem;
+         if (domParent.equals(domNode))
+             tem = this;
+         else
+             tem = createElement(domParent);
++
++    Name attrName = root.nameTable.createName(node.getNodeName());
++
++    org.w3c.dom.NamedNodeMap domAttributes = domParent.getAttributes();
++    int len = domAttributes.getLength();
++    int i;
++    for (i = 0; i < len; i++)
++    {
++       org.w3c.dom.Node domAttribute = domAttributes.item(i);
++       if (domAttribute.getNodeName().equals(node.getNodeName()))
++           break;
++    }
++
+         // OPT It would be better to compute the child index lazily.
+-        return new ElementNode(node, tem, SiblingNodeIterator.computeChildIndex(tem, node));
++    if (i < len)
++       return new AttributeNode(attrName, node, tem,
++                                // attributes occur before children
++                                i - len - 1);
++
++    return null;
+     }
+ 
+     public String getGeneratedId()
+--- xt-20020426a-src/src/com/jclark/xsl/dom/SiblingNodeIterator.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/dom/SiblingNodeIterator.java	2007-02-19 23:26:17.000000000 +0100
+@@ -4,7 +4,7 @@ package com.jclark.xsl.dom;
+ 
+ import com.jclark.xsl.om.*;
+ 
+-class SiblingNodeIterator implements SafeNodeIterator
++public class SiblingNodeIterator implements SafeNodeIterator
+ {
+     ContainerNode parent;
+     int childIndex;
+@@ -54,7 +54,7 @@ class SiblingNodeIterator implements Saf
+         }
+     }
+ 
+-    static int computeChildIndex(ContainerNode parent, org.w3c.dom.Node domNode)
++    public static int computeChildIndex(ContainerNode parent, org.w3c.dom.Node domNode)
+     {
+         int preserveSpace = -1;
+         boolean ignoreText = false;
+--- xt-20020426a-src/src/com/jclark/xsl/expr/ArrayNodeIterator.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/expr/ArrayNodeIterator.java	2007-02-19 23:26:36.000000000 +0100
+@@ -4,13 +4,13 @@ package com.jclark.xsl.expr;
+ 
+ import com.jclark.xsl.om.*;
+ 
+-class ArrayNodeIterator implements NodeIterator
++public class ArrayNodeIterator implements NodeIterator
+ {
+     private int i;
+     private int len;
+     private Node[] nodes;
+ 
+-    ArrayNodeIterator(Node[] nodes, int start, int end)
++    public ArrayNodeIterator(Node[] nodes, int start, int end)
+     {
+         this.nodes = nodes;
+         this.len = end;
+--- xt-20020426a-src/src/com/jclark/xsl/expr/ExprParser.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/expr/ExprParser.java	2007-02-19 23:28:23.000000000 +0100
+@@ -699,7 +699,8 @@ public class ExprParser extends ExprToke
+             if (isAttributeAxis) {
+                 nodeTest = new AttributeTest(expandName());
+             } else {
+-                nodeTest = new ElementTest(expandName());
++//                nodeTest = new ElementTest(expandName());
++                nodeTest = new ElementTest(expandElementTypeName());
+             }
+             break;
+ 
+@@ -944,6 +945,18 @@ public class ExprParser extends ExprToke
+         try {
+             if (prefixMap != null)
+                 return prefixMap.expandAttributeName(currentTokenValue, null);
++      else
++       return null;
++    }
++    catch (XSLException e) {
++      throw new ParseException("undefined prefix");
++    }
++  }
++
++  private Name expandElementTypeName() throws ParseException {
++    try {
++      if (prefixMap != null)
++       return prefixMap.expandElementTypeName(currentTokenValue, null);
+             else
+                 return null;
+         }
+--- xt-20020426a-src/src/com/jclark/xsl/expr/NodeSetVariant.java.orig	2007-02-19 23:08:23.000000000 +0100
++++ xt-20020426a-src/src/com/jclark/xsl/expr/NodeSetVariant.java	2007-02-19 23:28:42.000000000 +0100
+@@ -4,10 +4,10 @@ package com.jclark.xsl.expr;
+ 
+ import com.jclark.xsl.om.*;
+ 
+-class NodeSetVariant extends VariantBase {
++public class NodeSetVariant extends VariantBase {
+     private final NodeIterator iter;
+ 
+-    NodeSetVariant(NodeIterator iter) {
++    public NodeSetVariant(NodeIterator iter) {
+         this.iter = iter;
+     }
+ 

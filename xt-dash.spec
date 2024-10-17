@@ -16,7 +16,7 @@ Group:		Development/Java
 Source0:	http://www.blnz.com/xt/%{bname}-%{version}-src.tar.lzma
 Source1:	xt-dash-build.xml
 Patch0:		xt-dash-20020426a-public.patch
-Url:		http://www.blnz.com/xt/index.html
+Url:		https://www.blnz.com/xt/index.html
 Requires:	%{jarlibs}
 BuildRequires:	ant
 BuildRequires:	java-rpmbuild >= 0:1.5 lzma
